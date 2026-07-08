@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Yawaragi",
+  "version": "0.1.0",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://app.slack.com/*",
+    "https://*.backlog.com/*",
+    "https://*.backlog.jp/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://app.slack.com/*",
+        "https://*.backlog.com/*",
+        "https://*.backlog.jp/*"
+      ],
+      "js": ["src/storage.js", "src/popover.js", "src/content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  }
+}
