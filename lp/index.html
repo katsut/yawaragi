@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Yawaragi（和らぎ）— テキストのキツさから、受け手を守る</title>
+<meta name="description" content="Slack・Backlog のキツい一言から受け手を守る、オンデバイスの感情バッファ。何も外部送信しない Chrome 拡張。">
+<style>
+  :root {
+    --bg: #faf7f1;
+    --bg-soft: #f1ece2;
+    --card: #ffffff;
+    --ink: #2b2a33;
+    --ink-soft: #5c5a66;
+    --accent: #4a5fc1;
+    --accent-soft: #eef1fb;
+    --warm: #c96f4a;
+    --line: #e5dfd2;
+    --shadow: 0 8px 30px rgba(43, 42, 51, .08);
+    --radius: 16px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17161c;
+      --bg-soft: #201f27;
+      --card: #24232c;
+      --ink: #ecebf2;
+      --ink-soft: #a5a2b3;
+      --accent: #8f9ff0;
+      --accent-soft: #2a2d44;
+      --warm: #e0906c;
+      --line: #37353f;
+      --shadow: 0 8px 30px rgba(0, 0, 0, .35);
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Noto Sans JP", sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.85;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+
+  /* header */
+  header {
+    position: sticky; top: 0; z-index: 10;
+    background: color-mix(in srgb, var(--bg) 85%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  .nav { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+  .brand { font-weight: 700; font-size: 1.05rem; letter-spacing: .02em; color: var(--ink); }
+  .brand .shield { margin-right: .4em; }
+  .nav-cta {
+    font-size: .85rem; font-weight: 600;
+    background: var(--accent); color: #fff;
+    padding: .45em 1.1em; border-radius: 999px;
+  }
+
+  /* hero */
+  .hero { padding: 88px 0 64px; }
+  .hero-grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 56px; align-items: center; }
+  .kicker {
+    display: inline-block; font-size: .8rem; font-weight: 700; letter-spacing: .08em;
+    color: var(--accent); background: var(--accent-soft);
+    padding: .3em 1em; border-radius: 999px; margin-bottom: 20px;
+  }
+  h1 { font-size: clamp(1.7rem, 4vw, 2.6rem); line-height: 1.45; font-weight: 800; letter-spacing: .01em; }
+  h1 .em { color: var(--warm); }
+  .lead { margin-top: 20px; color: var(--ink-soft); font-size: 1.02rem; }
+  .hero-ctas { margin-top: 32px; display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+  .btn-primary {
+    background: var(--accent); color: #fff; font-weight: 700;
+    padding: .8em 1.8em; border-radius: 12px; box-shadow: var(--shadow);
+    display: inline-block;
+  }
+  .btn-note { font-size: .78rem; color: var(--ink-soft); }
+  .lock-line { margin-top: 18px; font-size: .85rem; color: var(--ink-soft); }
+
+  /* popover mock */
+  .mock { position: relative; }
+  .msg-card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px 18px; font-size: .9rem; box-shadow: var(--shadow);
+    margin-bottom: 14px;
+  }
+  .msg-card .who { font-weight: 700; font-size: .8rem; }
+  .msg-card .who .time { font-weight: 400; color: var(--ink-soft); margin-left: .6em; font-size: .75rem; }
+  .msg-card .body { margin-top: 4px; }
+  .msg-card .shield-btn {
+    position: absolute; right: 14px; top: 12px;
+    background: var(--accent-soft); border: 1px solid var(--line);
+    border-radius: 8px; padding: 2px 8px; font-size: .85rem;
+  }
+  .popover {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 20px 22px; font-size: .84rem;
+  }
+  .popover .p-head { font-weight: 800; font-size: .9rem; margin-bottom: 10px; }
+  .popover .temp {
+    background: var(--accent-soft); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px;
+  }
+  .popover .temp b { display: block; margin-bottom: 2px; }
+  .popover .sec { border-top: 1px dashed var(--line); padding: 10px 2px; }
+  .popover .sec .label { font-size: .72rem; font-weight: 700; color: var(--accent); letter-spacing: .05em; }
+  .popover .reply {
+    background: var(--bg-soft); border-radius: 10px; padding: 10px 14px; margin-top: 6px;
+    display: flex; justify-content: space-between; gap: 10px; align-items: center;
+  }
+  .popover .copy {
+    font-size: .72rem; font-weight: 700; color: var(--accent);
+    border: 1px solid var(--accent); border-radius: 8px; padding: 2px 10px; white-space: nowrap;
+  }
+  .popover .foot {
+    margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line);
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;
+    font-size: .74rem; color: var(--ink-soft);
+  }
+  .popover .caps span {
+    border: 1px solid var(--line); border-radius: 6px; padding: 1px 8px; margin-left: 4px;
+  }
+  .popover .caps .on { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* sections */
+  section { padding: 72px 0; }
+  section.alt { background: var(--bg-soft); }
+  h2 { font-size: clamp(1.4rem, 3vw, 1.9rem); font-weight: 800; line-height: 1.5; margin-bottom: 12px; }
+  .sec-lead { color: var(--ink-soft); max-width: 640px; margin-bottom: 40px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 26px 24px; box-shadow: var(--shadow);
+  }
+  .card .icon { font-size: 1.6rem; }
+  .card h3 { font-size: 1.02rem; margin: 10px 0 8px; }
+  .card p { font-size: .88rem; color: var(--ink-soft); }
+  .card .src { display: block; margin-top: 10px; font-size: .74rem; color: var(--ink-soft); opacity: .8; }
+
+  /* steps (4 outputs) */
+  .steps { counter-reset: step; display: grid; gap: 14px; }
+  .step {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 20px 24px 20px 64px; position: relative; box-shadow: var(--shadow);
+  }
+  .step::before {
+    counter-increment: step; content: counter(step);
+    position: absolute; left: 20px; top: 20px;
+    width: 30px; height: 30px; border-radius: 50%;
+    background: var(--accent); color: #fff; font-weight: 800;
+    display: grid; place-items: center; font-size: .9rem;
+  }
+  .step h3 { font-size: 1rem; }
+  .step p { font-size: .88rem; color: var(--ink-soft); }
+  .order-note {
+    margin-top: 22px; font-size: .85rem; color: var(--ink-soft);
+    background: var(--accent-soft); border-radius: 12px; padding: 14px 18px;
+  }
+
+  /* privacy */
+  .privacy-hero {
+    text-align: center; max-width: 660px; margin: 0 auto;
+  }
+  .privacy-hero .big { font-size: clamp(1.3rem, 3vw, 1.7rem); font-weight: 800; line-height: 1.6; }
+  .privacy-points { margin-top: 36px; }
+
+  /* faq */
+  details {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 16px 22px; margin-bottom: 12px;
+  }
+  summary { cursor: pointer; font-weight: 700; font-size: .95rem; }
+  details p { margin-top: 10px; font-size: .88rem; color: var(--ink-soft); }
+
+  /* footer */
+  .final-cta { text-align: center; padding: 80px 0; }
+  footer {
+    border-top: 1px solid var(--line); padding: 28px 0; font-size: .78rem; color: var(--ink-soft);
+  }
+  .foot-row { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+
+  @media (max-width: 820px) {
+    .hero { padding: 56px 0 40px; }
+    .hero-grid { grid-template-columns: 1fr; gap: 40px; }
+    section { padding: 56px 0; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <div class="brand"><span class="shield">🛡️</span>Yawaragi<span style="font-weight:400; color:var(--ink-soft); font-size:.85rem;">（和らぎ）</span></div>
+    <a class="nav-cta" href="#cta">近日公開</a>
+  </div>
+</header>
+
+<main>
+  <div class="hero wrap">
+    <div class="hero-grid">
+      <div>
+        <span class="kicker">オンデバイスの感情バッファ</span>
+        <h1>そのひと言、<br>実際より<span class="em">キツく</span>届いていませんか。</h1>
+        <p class="lead">
+          テキストはトーン・表情・間が落ちる分、中立のつもりの言葉でも冷たく刺さります。
+          Yawaragi は、Slack・Backlog のキツい一言に傷ついた瞬間、🛡️ を押すだけで——
+          気持ちを受け止め、落ちていた文脈を補い、後悔しない返信を用意する Chrome 拡張です。
+        </p>
+        <div class="hero-ctas">
+          <a class="btn-primary" href="#cta">🛡️ Chrome に追加（近日公開）</a>
+          <span class="btn-note">Chrome 138+ / 無料</span>
+        </div>
+        <p class="lock-line">🔒 処理はすべて端末内（Gemini Nano）。<b>何も、どこにも送信しません。</b></p>
+      </div>
+
+      <div class="mock" aria-label="Yawaragi の動作イメージ">
+        <div class="msg-card">
+          <div class="who">Bob <span class="time">14:32</span></div>
+          <div class="body">この資料、明日までに全部直しておいて。</div>
+          <div class="shield-btn">🛡️</div>
+        </div>
+        <div class="popover">
+          <div class="p-head">🛡️ Yawaragi</div>
+          <div class="temp">
+            <b>まず——そう感じたこと自体は、自然なことです。</b>
+            体感はキツめ／推定される実際の悪意は低め
+          </div>
+          <div class="sec">
+            <span class="label">善意の再解釈</span>
+            締切前で余裕がなく、言葉が短くなっただけかもしれません。
+          </div>
+          <div class="sec">
+            <span class="label">落ちてる文脈</span>
+            このスレッドでは、相手は誰に対しても短文です（多忙のサイン）。
+          </div>
+          <div class="sec">
+            <span class="label">冷静な返信ドラフト</span>
+            <div class="reply">
+              <span>「承知しました。優先度の高い箇所から直します。全体のうち特に気になっている点があれば教えてください。」</span>
+              <span class="copy">コピー</span>
+            </div>
+          </div>
+          <div class="foot">
+            <span>🔒 端末内で処理・送信なし</span>
+            <span class="caps">今日のキャパ <span>低</span><span class="on">普通</span><span>高</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section class="alt">
+    <div class="wrap">
+      <h2>なぜ、言葉は実際よりキツく届くのか</h2>
+      <p class="sec-lead">感じ方の問題ではありません。テキストという媒体の、構造的な性質です。</p>
+      <div class="cards">
+        <div class="card">
+          <div class="icon">📤</div>
+          <h3>送り手は「伝わっている」と過信する</h3>
+          <p>メールやチャットでは、送り手が意図したトーンの伝達精度は本人の自信を大きく下回ることが実験で示されています。書いた側の頭の中では完璧に響いていても、届くのは文字列だけ。</p>
+          <span class="src">Kruger &amp; Epley (2005) — Egocentrism over e-mail</span>
+        </div>
+        <div class="card">
+          <div class="icon">🧠</div>
+          <h3>脳は曖昧さを「脅威」と読む</h3>
+          <p>人間の脳はネガティブな刺激に速く強く反応するよう配線されています（ネガティビティ・バイアス）。トーンの落ちた曖昧なテキストは、まず「怒っているのでは」と防衛的に解釈されます。疲れている日ほど、この傾向は強まります。</p>
+          <span class="src">気分一致処理・認知資源の枯渇に関する複数の実証研究</span>
+        </div>
+        <div class="card">
+          <div class="icon">。</div>
+          <h3>句点ひとつでも、刺さる</h3>
+          <p>「わかりました。」の「。」が冷淡・拒絶と受け取られる——世代間の表記規範のズレ（いわゆるマルハラ）も実証されています。悪意ゼロの文体が、受け手には静かな怒りに見えることがあります。</p>
+          <span class="src">国立国語研究所 (2024) ほか</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>押した瞬間だけ、4つ返す</h2>
+      <p class="sec-lead">自動では何もしません。あなたが🛡️を押したときだけ、画面上のスレッドを読んで働きます。</p>
+      <div class="steps">
+        <div class="step">
+          <h3>温度 — まず、気持ちを受け止める</h3>
+          <p>「気にしすぎ」とは決して言いません。そう感じたことを正当なものとして受け止めた上で、体感のキツさと推定される実際の悪意度を分けて示します。</p>
+        </div>
+        <div class="step">
+          <h3>善意の再解釈</h3>
+          <p>相手を寛容かつ現実的に読み直した場合の意図。「多忙」「締切前」「文章の不器用さ」——悪意ではない可能性を、断定せずに提示します。</p>
+        </div>
+        <div class="step">
+          <h3>落ちてる文脈</h3>
+          <p>画面上のスレッドから、見落としている背景を拾います。「相手は全員に短文」「別の話題への苛立ちの流れ弾」。根拠がなければ、正直に「不明」と言います。</p>
+        </div>
+        <div class="step">
+          <h3>冷静な返信ドラフト</h3>
+          <p>媚びず、卑屈にならず、関係を保つ返信案。ワンクリックでコピーして、あなた自身の言葉に直して送れます。</p>
+        </div>
+      </div>
+      <div class="order-note">
+        <b>この順番は、好みではなく臨床エビデンスです。</b>
+        感情制御の研究では「まず受け止める（validate）→ それから読み直す（reappraise）」の順序が原則。
+        受け止めの前の"ポジティブ変換"は逆効果になることが示されています。
+        だから Yawaragi は、受け止めを飛ばして再解釈だけを出すことはありません。
+      </div>
+    </div>
+  </section>
+
+  <section class="alt">
+    <div class="wrap">
+      <div class="privacy-hero">
+        <h2>何も、どこにも送らない。</h2>
+        <p class="big">あなたが誰の言葉に傷ついたか。<br>それは、あなただけのものです。</p>
+      </div>
+      <div class="cards privacy-points">
+        <div class="card">
+          <div class="icon">📵</div>
+          <h3>バックエンドが存在しない</h3>
+          <p>AI 処理は Chrome 内蔵の Gemini Nano がこの端末の中で実行します。サーバーも、アカウント登録も、ログ送信もありません。</p>
+        </div>
+        <div class="card">
+          <div class="icon">🔐</div>
+          <h3>権限レベルで「漏れようがない」</h3>
+          <p>拡張は広域ネットワーク権限を持ちません。送信する手段そのものが存在しない——ポリシーではなく、構造で保証します。</p>
+        </div>
+        <div class="card">
+          <div class="icon">🙈</div>
+          <h3>会社にも、相手にも、見えない</h3>
+          <p>管理者ダッシュボードや利用分析は作りません。感情データが人事評価や監視に使われる余地を、設計段階から排除しています。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>エビデンスに基づいて設計されています</h2>
+      <p class="sec-lead">機能の一つひとつが、コミュニケーション心理学・臨床感情制御・デジタル介入安全性のリサーチに紐づいています。</p>
+      <div class="cards">
+        <div class="card">
+          <div class="icon">✋</div>
+          <h3>手動トリガーだけ、には理由がある</h3>
+          <p>介入研究では、本人が「今、助けがほしい」と求めた瞬間の支援が、苦痛を自動検知して押しつける通知より一貫して有効でした。🛡️を押すのはいつも、あなたです。</p>
+        </div>
+        <div class="card">
+          <div class="icon">🚫</div>
+          <h3>toxic positivity をしない</h3>
+          <p>人格攻撃やハラスメント級の言葉まで「善意に読み直そう」とは言いません。そのときは「あなたに非のない不当な言動」と受け止め、距離を置くことを提案します。</p>
+        </div>
+        <div class="card">
+          <div class="icon">🤝</div>
+          <h3>人から遠ざけない</h3>
+          <p>AI との対話に引き込むチャット機能は持ちません。出力は必ず「人へ返す一手」——返信ドラフトで終わります。関係を代替するのではなく、関係に良い状態で戻すための道具です。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="alt">
+    <div class="wrap">
+      <h2>よくある質問</h2>
+      <details>
+        <summary>相手に通知されたり、バレたりしますか？</summary>
+        <p>いいえ。Yawaragi はあなたの画面の上だけで動きます。相手にも、ワークスペースの管理者にも、何も送信・通知されません。</p>
+      </details>
+      <details>
+        <summary>会社の許可は必要ですか？</summary>
+        <p>Yawaragi は Slack や Backlog の API・トークンを使いません（画面の表示を読むだけ）。データは端末外に出ないため、多くの環境で個人のブラウザ拡張として利用できます。所属組織のポリシーはご確認ください。</p>
+      </details>
+      <details>
+        <summary>「気にしすぎだよ」と言われたりしませんか？</summary>
+        <p>言いません。感情の否定（invalidation）は逆効果であることが臨床研究で示されています。Yawaragi は必ず、あなたの感じ方を受け止めるところから始めます。</p>
+      </details>
+      <details>
+        <summary>動作環境は？</summary>
+        <p>Chrome 138 以降（Windows 10/11・macOS 13+・Linux・ChromeOS）。初回のみ、オンデバイスAIモデル（約2GB）のダウンロードが必要です。</p>
+      </details>
+    </div>
+  </section>
+
+  <div class="final-cta wrap" id="cta">
+    <h2>対話が痩せていく時代の、<br>関係を守るインフラ。</h2>
+    <p class="sec-lead" style="margin:16px auto 32px;">
+      AI が下書きも要約も代返も担う時代、残された人間同士の接点はほぼテキストだけになります。
+      その細い通り道を、感情事故から守ります。
+    </p>
+    <a class="btn-primary" href="#">🛡️ Chrome に追加（近日公開）</a>
+    <p class="lock-line">🔒 端末内で処理・送信なし</p>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap foot-row">
+    <span>🛡️ Yawaragi（和らぎ）</span>
+    <span>このページは静的ファイル1枚です。トラッカーも計測タグもありません。</span>
+  </div>
+</footer>
+
+</body>
+</html>
