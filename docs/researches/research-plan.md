@@ -3,6 +3,7 @@
 | | |
 |---|---|
 | Date | 2026-07-08 |
+| Status | ✅ 3本とも実施済み（2026-07-08）。結果: ① `01-text-reception-psychology.md` ／ ② `02-clinical-emotion-regulation.md` ／ ③ `03-digital-reframing-intervention-safety.md`。PRD / ARCHITECTURE へ反映済み |
 | 目的 | ボタンが返す中身（再解釈・対処・介入設計）を、勘でなくエビデンスで固める |
 | 使い方 | 下記を Deep Research で回す → 結果を同 `docs/researches/` に配置 → `docs/ARCHITECTURE.md` の system prompt と PRD の North Star に反映 |
 | 推奨順 | ①（なぜキツく届くか）→ ②（何が効くか・医学）→ ③（ツールで効かせる/害さない） |
